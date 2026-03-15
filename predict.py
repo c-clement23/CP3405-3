@@ -4,6 +4,7 @@ import argparse
 import json
 import os
 import re
+import time
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List
@@ -68,7 +69,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--period",
         type=str,
-        default="6mo",
+        default="1y",
         help="Yahoo Finance period for fetching recent history, e.g. 3mo, 6mo, 1y",
     )
     return parser.parse_args()
@@ -146,30 +147,52 @@ def load_artifact(model_path: str) -> Dict[str, Any]:
 
 
 def fetch_live_data(ticker: str, period: str) -> pd.DataFrame:
-    df = yf.download(
-        ticker,
-        period=period,
-        interval="1d",
-        auto_adjust=False,
-        progress=False,
-        threads=False,
-    )
+    last_error = None
 
-    if df is None or df.empty:
-        raise ValueError(f"No Yahoo Finance data returned for {ticker}")
+    for attempt in range(3):
+        try:
+            df = yf.download(
+                ticker,
+                period=period,
+                interval="1d",
+                auto_adjust=False,
+                progress=False,
+                threads=False,
+            )
 
-    if isinstance(df.columns, pd.MultiIndex):
-        df.columns = [col[0] if isinstance(col, tuple) else col for col in df.columns]
+            if df is None or df.empty:
+                # Fallback to a longer window if Yahoo returns nothing for the requested period
+                df = yf.download(
+                    ticker,
+                    period="2y",
+                    interval="1d",
+                    auto_adjust=False,
+                    progress=False,
+                    threads=False,
+                )
 
-    df = df.reset_index()
+            if df is None or df.empty:
+                last_error = f"No Yahoo Finance data returned for {ticker}"
+            else:
+                if isinstance(df.columns, pd.MultiIndex):
+                    df.columns = [col[0] if isinstance(col, tuple) else col for col in df.columns]
 
-    expected_cols = ["Date", "Open", "High", "Low", "Close", "Volume"]
-    missing = [c for c in expected_cols if c not in df.columns]
-    if missing:
-        raise ValueError(f"Missing expected Yahoo columns for {ticker}: {missing}")
+                df = df.reset_index()
 
-    df["Ticker"] = ticker
-    return df
+                expected_cols = ["Date", "Open", "High", "Low", "Close", "Volume"]
+                missing = [c for c in expected_cols if c not in df.columns]
+                if missing:
+                    raise ValueError(f"Missing expected Yahoo columns for {ticker}: {missing}")
+
+                df["Ticker"] = ticker
+                return df
+
+        except Exception as e:
+            last_error = str(e)
+
+        time.sleep(2)
+
+    raise ValueError(f"Ticker failed: {last_error or f'No Yahoo Finance data returned for {ticker}'}")
 
 
 def build_live_features(df: pd.DataFrame) -> pd.DataFrame:
