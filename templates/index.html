@@ -1,0 +1,213 @@
+<!DOCTYPE html>
+
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Stock Prediction</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+</head>
+<body>
+  <div class="wrap">
+    <header class="hero">
+      <div class="brand">
+        <div class="logo">AI</div>
+        <div>
+          <h1>Stock Prediction</h1>
+          <p>Clean prediction dashboard with note and confidence.</p>
+        </div>
+      </div>
+    </header>
+
+    <main class="grid">
+      <section class="card">
+        <div class="card-head">Run prediction</div>
+        <div class="card-body">
+          <div class="stack">
+            <div class="field">
+              <label for="stockSelect">Stock</label>
+              <select id="stockSelect">
+                <option value="AAPL">AAPL</option>
+                <option value="TSLA" selected>TSLA</option>
+                <option value="NVDA">NVDA</option>
+              </select>
+            </div>
+
+            <div class="field">
+              <label for="horizonSelect">Horizon</label>
+              <select id="horizonSelect">
+                <option value="1">1 day</option>
+                <option value="7" selected>7 days</option>
+                <option value="30">30 days</option>
+              </select>
+            </div>
+
+            <div class="field">
+              <label for="modelSelect">Model</label>
+              <select id="modelSelect">
+                <option value="xgboost" selected>XGBoost</option>
+                <option value="logistic_regression">Logistic Regression</option>
+                <option value="decision_tree">Decision Tree</option>
+                <option value="llama">Groq Llama</option>
+              </select>
+            </div>
+
+
+            <button id="btn" class="btn" type="button">Run prediction</button>
+
+            <div class="meta">
+              <div>Backend: <code>POST /run_predict</code></div>
+              <div>Result source: <code>output.json</code></div>
+            </div>
+
+            <div class="status" id="status">Idle.</div>
+          </div>
+        </div>
+      </section>
+
+      <section class="card">
+        <div class="card-head">Prediction result</div>
+        <div class="card-body results">
+          <div class="stats-grid">
+            <div class="stat">
+              <div class="label">Stock</div>
+              <div class="value" id="outStock">–</div>
+            </div>
+
+            <div class="stat">
+              <div class="label">Horizon</div>
+              <div class="value" id="outHorizon">–</div>
+            </div>
+
+            <div class="stat">
+              <div class="label">Confidence</div>
+              <div class="value" id="outConf">–</div>
+            </div>
+
+            <div class="stat">
+              <div class="label">Target date</div>
+              <div class="value" id="outDate">–</div>
+            </div>
+          </div>
+
+          <div class="result-grid">
+            <div class="prediction-box">
+              <div class="label">Prediction</div>
+              <div class="pill neutral" id="outPred">–</div>
+            </div>
+
+            <div class="note-box">
+              <div class="label">Model note</div>
+              <div class="note-text" id="outNote">–</div>
+            </div>
+          </div>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <script>
+    const $ = (id) => document.getElementById(id);
+
+    function setStatus(msg) {
+      $("status").textContent = msg;
+    }
+
+    function setPill(text) {
+      const el = $("outPred");
+      el.textContent = text || "–";
+      el.classList.remove("up", "down", "neutral");
+
+      if (text === "UP") el.classList.add("up");
+      else if (text === "DOWN") el.classList.add("down");
+      else el.classList.add("neutral");
+    }
+
+    function fmtPct01(x) {
+      if (x === null || x === undefined || Number.isNaN(Number(x))) return "–";
+      return Math.round(Number(x) * 100) + "%";
+    }
+
+    function clearOutput() {
+      $("outStock").textContent = "–";
+      $("outHorizon").textContent = "–";
+      $("outConf").textContent = "–";
+      $("outDate").textContent = "–";
+      $("outNote").textContent = "–";
+      setPill("–");
+    }
+
+    function setOutputFromResult(r) {
+      $("outStock").textContent = r.ticker ?? "–";
+      $("outHorizon").textContent = r.horizon_days != null ? `${r.horizon_days} day(s)` : "–";
+      setPill(r.direction ?? "–");
+
+      const pu = r.prob_up;
+      const pd = r.prob_down;
+      let conf = "–";
+      if (pu != null || pd != null) {
+        conf = fmtPct01(Math.max(pu ?? 0, pd ?? 0));
+      }
+      $("outConf").textContent = conf;
+
+      $("outDate").textContent = "–";
+      $("outNote").textContent = r.note ?? r.llm_note ?? "–";
+    }
+
+    async function runAndShow() {
+      clearOutput();
+
+      const ticker = $("stockSelect").value;
+      const horizon = Number($("horizonSelect").value);
+      const model = $("modelSelect").value;          // <‑‑ ① read model
+
+      setStatus("Running prediction...");
+
+      try {
+        const res = await fetch("/run_predict", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            tickers: ticker,
+            horizon: horizon,
+            ticker: ticker,
+            model: model                            // <‑‑ ② send model
+          })
+        });
+
+        const payload = await res.json();
+
+        if (!res.ok || !payload.ok) {
+          setStatus("Error: " + (payload.error || "backend failed"));
+          return;
+        }
+
+        const picked = payload.picked || {};
+
+        if (picked.result) {
+          setOutputFromResult(picked.result);
+          $("outDate").textContent = picked.target_date ?? picked.result.as_of_date ?? "–";
+          setStatus("Done.");
+          return;
+        }
+
+        if (picked.error) {
+          $("outStock").textContent = ticker;
+          $("outHorizon").textContent = horizon + " day(s)";
+          $("outNote").textContent = picked.error.error || "unknown error";
+          setPill("–");
+          setStatus("Ticker failed: " + (picked.error.error || "unknown error"));
+          return;
+        }
+
+        setStatus("No result returned.");
+      } catch (e) {
+        console.error(e);
+        setStatus("Error: cannot reach backend.");
+      }
+    }
+
+    $("btn").addEventListener("click", runAndShow);
+  </script>
+</body>
+</html>
