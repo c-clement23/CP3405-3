@@ -21,74 +21,74 @@ ALLOWED_MODELS = {"logistic_regression", "decision_tree", "xgboost", "llama"}
 
 app = Flask(__name__)
 
-# app.secret_key = "change-this-to-a-random-secret"  # needed for session + flash
+app.secret_key = "change-this-to-a-random-secret"  # needed for session + flash
 
-# # simple in-memory user store for demo (not for production)
-# users: Dict[str, Dict[str, str]] = {}
+# simple in-memory user store for demo (not for production)
+users: Dict[str, Dict[str, str]] = {}
 
-# @app.route("/")
-# def home():
-#     if "user" not in session:
-#         return redirect(url_for("login"))
-#     return render_template("index.html")
-
-
-# @app.route("/login", methods=["GET", "POST"])
-# def login():
-#     if request.method == "POST":
-#         email = request.form.get("email", "").strip()
-#         password = request.form.get("password", "").strip()
-
-#         if email in users and users[email]["password"] == password:
-#             session["user"] = email
-#             return redirect(url_for("home"))
-#         else:
-#             flash("Invalid email or password")
-
-#     return render_template("login.html")
+@app.route("/")
+def home():
+    if "user" not in session:
+        return redirect(url_for("login"))
+    return render_template("index.html")
 
 
-# @app.route("/signup", methods=["GET", "POST"])
-# def signup():
-#     if request.method == "POST":
-#         username = request.form.get("username", "").strip()
-#         email = request.form.get("email", "").strip()
-#         password = request.form.get("password", "").strip()
-#         confirm_password = request.form.get("confirm_password", "").strip()
+@app.route("/login", methods=["GET", "POST"])
+def login():
+    if request.method == "POST":
+        email = request.form.get("email", "").strip()
+        password = request.form.get("password", "").strip()
 
-#         if not username or not email or not password or not confirm_password:
-#             flash("Please fill in all fields")
-#             return redirect(url_for("signup"))
+        if email in users and users[email]["password"] == password:
+            session["user"] = email
+            return redirect(url_for("home"))
+        else:
+            flash("Invalid email or password")
 
-#         if password != confirm_password:
-#             flash("Passwords do not match")
-#             return redirect(url_for("signup"))
-
-#         if email in users:
-#             flash("Email already registered")
-#             return redirect(url_for("signup"))
-
-#         users[email] = {
-#             "username": username,
-#             "password": password
-#         }
-
-#         flash("Account created successfully. Please login.")
-#         return redirect(url_for("login"))
-
-#     return render_template("signup.html")
+    return render_template("login.html")
 
 
-# @app.route("/logout")
-# def logout():
-#     session.pop("user", None)
-#     flash("You have been logged out")
-#     return redirect(url_for("login"))
+@app.route("/signup", methods=["GET", "POST"])
+def signup():
+    if request.method == "POST":
+        username = request.form.get("username", "").strip()
+        email = request.form.get("email", "").strip()
+        password = request.form.get("password", "").strip()
+        confirm_password = request.form.get("confirm_password", "").strip()
 
-# @app.get("/__debug_users")
-# def __debug_users():
-#     # DO NOT use in production, only for testing
-#     return jsonify(users)
+        if not username or not email or not password or not confirm_password:
+            flash("Please fill in all fields")
+            return redirect(url_for("signup"))
+
+        if password != confirm_password:
+            flash("Passwords do not match")
+            return redirect(url_for("signup"))
+
+        if email in users:
+            flash("Email already registered")
+            return redirect(url_for("signup"))
+
+        users[email] = {
+            "username": username,
+            "password": password
+        }
+
+        flash("Account created successfully. Please login.")
+        return redirect(url_for("login"))
+
+    return render_template("signup.html")
+
+
+@app.route("/logout")
+def logout():
+    session.pop("user", None)
+    flash("You have been logged out")
+    return redirect(url_for("login"))
+
+@app.get("/__debug_users")
+def __debug_users():
+    # DO NOT use in production, only for testing
+    return jsonify(users)
 
 
 
